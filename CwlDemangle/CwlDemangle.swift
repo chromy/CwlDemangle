@@ -3714,55 +3714,9 @@ fileprivate func decodeSwiftPunycode(_ value: String) throws -> String {
 // MARK: NodePrinter.cpp
 
 fileprivate extension TextOutputStream {
-	mutating func write<S: Sequence, T: Sequence>(sequence: S, labels: T, render: (inout Self, S.Iterator.Element) -> ()) where T.Iterator.Element == String? {
-		var lg = labels.makeIterator()
-		if let maybePrefix = lg.next(), let prefix = maybePrefix {
-			write(prefix)
-		}
-		for e in sequence {
-			render(&self, e)
-			if let maybeLabel = lg.next(), let label = maybeLabel {
-				write(label)
-			}
-		}
-	}
-	
-	mutating func write<S: Sequence>(sequence: S, prefix: String? = nil, separator: String? = nil, suffix: String? = nil, render: (inout Self, S.Iterator.Element) -> ()) {
-		if let p = prefix {
-			write(p)
-		}
-		var first = true
-		for e in sequence {
-			if !first, let s = separator {
-				write(s)
-			}
-			render(&self, e)
-			first = false
-		}
-		if let s = suffix {
-			write(s)
-		}
-	}
-	
-	mutating func write<T>(optional: Optional<T>, prefix: String? = nil, suffix: String? = nil, render: (inout Self, T) -> ()) {
-		if let p = prefix {
-			write(p)
-		}
-		if let e = optional {
-			render(&self, e)
-		}
-		if let s = suffix {
-			write(s)
-		}
-	}
-	
-	mutating func write<T>(value: T, prefix: String? = nil, suffix: String? = nil, render: (inout Self, T) -> ()) {
-		if let p = prefix {
-			write(p)
-		}
-		render(&self, value)
-		if let s = suffix {
-			write(s)
+	mutating func write(conditional: Bool, _ value: String) {
+		if conditional {
+			write(value)
 		}
 	}
 }
@@ -3898,743 +3852,773 @@ fileprivate struct SymbolPrinter {
 		return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: true, extraName: "\(label) macro @\(name.children.at(2)?.description ?? "") expansion #", extraIndex: (name.children.at(3)?.index ?? 0) + 1)
 	}
 	
-	mutating func printName(_ name: SwiftSymbol, asPrefixContext: Bool = false) -> SwiftSymbol? {
-		switch name.kind {
-		case .static: printFirstChild(name, prefix: "static ")
-		case .curryThunk: printFirstChild(name, prefix: "curry thunk of ")
-		case .dispatchThunk: printFirstChild(name, prefix: "dispatch thunk of ")
-		case .methodDescriptor: printFirstChild(name, prefix: "method descriptor for ")
-		case .methodLookupFunction: printFirstChild(name, prefix: "method lookup function for ")
-		case .outlinedBridgedMethod: target.write("outlined bridged method (\(name.text ?? "")) of ")
-		case .outlinedCopy: printFirstChild(name, prefix: "outlined copy of ")
-		case .outlinedConsume: printFirstChild(name, prefix: "outlined consume of ")
-		case .outlinedRetain: printFirstChild(name, prefix: "outlined retain of ")
-		case .outlinedRelease: printFirstChild(name, prefix: "outlined release of ")
-		case .outlinedInitializeWithTake: printFirstChild(name, prefix: "outlined init with take of ")
-		case .outlinedInitializeWithCopy: fallthrough
-		case .outlinedInitializeWithCopyNoValueWitness: printFirstChild(name, prefix: "outlined init with copy of ")
-		case .outlinedAssignWithTake: fallthrough
-		case .outlinedAssignWithTakeNoValueWitness: printFirstChild(name, prefix: "outlined assign with take of ")
-		case .outlinedAssignWithCopy: fallthrough
-		case .outlinedAssignWithCopyNoValueWitness: printFirstChild(name, prefix: "outlined assign with copy of ")
-		case .outlinedDestroy: fallthrough
-		case .outlinedDestroyNoValueWitness: printFirstChild(name, prefix: "outlined destroy of ")
-		case .outlinedVariable: target.write("outlined variable #\(name.index ?? 0) of ")
-		case .outlinedReadOnlyObject: target.write("outlined read-only object #\(name.index ?? 0) of ")
-		case .directness: name.index.flatMap { Directness(rawValue: $0)?.description }.map { target.write("\($0) ") }
-		case .anonymousContext:
-			if options.contains(.qualifyEntities) && options.contains(.displayExtensionContexts) {
-				_ = printOptional(name.children.at(1))
-				target.write(".(unknown context at " + (name.children.first?.text ?? "") + ")")
-				if let second = name.children.at(2), !second.children.isEmpty {
-					target.write("<")
-					_ = printName(second)
-					target.write(">")
-				}
+	mutating func printAnonymousContext(_ name: SwiftSymbol) {
+		if options.contains(.qualifyEntities) && options.contains(.displayExtensionContexts) {
+			_ = printOptional(name.children.at(1))
+			target.write(".(unknown context at " + (name.children.first?.text ?? "") + ")")
+			if let second = name.children.at(2), !second.children.isEmpty {
+				target.write("<")
+				_ = printName(second)
+				target.write(">")
 			}
-		case .extension:
-			if options.contains(.qualifyEntities) && options.contains(.displayExtensionContexts) {
-				printFirstChild(name, prefix: "(extension in ", suffix: "):", asPrefixContext: true)
-			}
-			printSequence(name.children.slice(1, 3))
-		case .variable: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .withColon, hasName: true)
-		case .function: fallthrough
-		case .boundGenericFunction:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .functionStyle, hasName: true)
-		case .subscript: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .functionStyle, hasName: true, overwriteName: "subscript")
-		case .genericTypeParamDecl: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: true)
-		case .explicitClosure: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: options.contains(.showFunctionArgumentTypes) ? .functionStyle : .noType, hasName: false, extraName: "closure #", extraIndex: (name.children.at(1)?.index ?? 0) + 1)
-		case .implicitClosure: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: options.contains(.showFunctionArgumentTypes) ? .functionStyle : .noType, hasName: false, extraName: "implicit closure #", extraIndex: (name.children.at(1)?.index ?? 0) + 1)
-		case .global: printChildren(name)
-		case .suffix:
-			if options.contains(.displayUnmangledSuffix) {
-				target.write(" with unmangled suffix ")
-				quotedString(name.text ?? "")
-			}
-		case .initializer: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "variable initialization expression")
-		case .defaultArgumentInitializer: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "default argument \(name.children.at(1)?.index ?? 0)")
-		case .declContext: printFirstChild(name)
-		case .type: printFirstChild(name)
-		case .typeMangling: printFirstChild(name)
-		case .class: fallthrough
-		case .structure: fallthrough
-		case .enum: fallthrough
-		case .protocol: fallthrough
-		case .typeAlias: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: true)
-		case .otherNominalType: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: true)
-		case .localDeclName: _ = printOptional(name.children.at(1), suffix: " #\((name.children.at(0)?.index ?? 0) + 1)")
-		case .privateDeclName:
-			_ = printOptional(name.children.at(1), prefix: options.contains(.showPrivateDiscriminators) ? "(" : nil)
-			target.write(options.contains(.showPrivateDiscriminators) ? "\(name.children.count > 1 ? " " : "(")in \(name.children.at(0)?.text ?? ""))" : "")
-		case .relatedEntityDeclName: printFirstChild(name, prefix: "related decl '\(name.text ?? "")' for ")
-		case .module:
-			if options.contains(.displayModuleNames) {
-				target.write(name.text ?? "")
-			}
-		case .identifier:
+		}
+	}
+	
+	mutating func printExtension(_ name: SwiftSymbol) {
+		if options.contains(.qualifyEntities) && options.contains(.displayExtensionContexts) {
+			printFirstChild(name, prefix: "(extension in ", suffix: "):", asPrefixContext: true)
+		}
+		printSequence(name.children.slice(1, 3))
+	}
+	
+	mutating func printSuffix(_ name: SwiftSymbol) {
+		if options.contains(.displayUnmangledSuffix) {
+			target.write(" with unmangled suffix ")
+			quotedString(name.text ?? "")
+		}
+	}
+	
+	mutating func printPrivateDeclName(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(1), prefix: options.contains(.showPrivateDiscriminators) ? "(" : nil)
+		target.write(options.contains(.showPrivateDiscriminators) ? "\(name.children.count > 1 ? " " : "(")in \(name.children.at(0)?.text ?? ""))" : "")
+	}
+	
+	mutating func printModule(_ name: SwiftSymbol) {
+		if options.contains(.displayModuleNames) {
 			target.write(name.text ?? "")
-		case .index: target.write("\(name.index ?? 0)")
-			
-		case .cFunctionPointer: fallthrough
-		case .objCBlock: fallthrough
-		case .noEscapeFunctionType:  fallthrough
-		case .escapingAutoClosureType: fallthrough
-		case .autoClosureType: fallthrough
-		case .thinFunctionType: fallthrough
-		case .functionType: fallthrough
-		case .escapingObjCBlock: fallthrough
-		case .uncurriedFunctionType:
-			printFunctionType(name)
-		case .argumentTuple:
-			printFunctionParameters(labelList: nil, parameterType: name, showTypes: options.contains(.showFunctionArgumentTypes))
-		case .tuple: printChildren(name, prefix: "(", suffix: ")", separator: ", ")
-		case .tupleElement:
-			if let label = name.children.first(where: { $0.kind == .tupleElementName }) {
-				target.write("\(label.text ?? ""): ")
+		}
+	}
+	
+	mutating func printReturnType(_ name: SwiftSymbol) {
+		if name.children.isEmpty, let t = name.text {
+			target.write(t)
+		} else {
+			printChildren(name)
+		}
+	}
+	
+	mutating func printRetroactiveConformance(_ name: SwiftSymbol) {
+		if name.children.count == 2 {
+			printChildren(name, prefix: "retroactive @ ")
+		}
+	}
+	
+	mutating func printGenericSpecializationParam(_ name: SwiftSymbol) {
+		printFirstChild(name)
+		_ = printOptional(name.children.at(1), prefix: " with ")
+		name.children.slice(2, name.children.endIndex).forEach {
+			target.write(" and ")
+			_ = printName($0)
+		}
+	}
+	
+	mutating func printFunctionSignatureSpecializationParam(_ name: SwiftSymbol) {
+		target.write("Arg[\(name.index ?? 0)] = ")
+		var idx = printFunctionSigSpecializationParam(name, index: 0)
+		while idx < name.children.count {
+			target.write(" and ")
+			idx = printFunctionSigSpecializationParam(name, index: idx)
+		}
+	}
+	
+	mutating func printFunctionSignatureSpecializationParamKind(_ name: SwiftSymbol) {
+		let raw = name.index ?? 0
+		if let single = FunctionSigSpecializationParamKind(rawValue: raw) {
+			target.write(single.description)
+		} else {
+			let kinds: [FunctionSigSpecializationParamKind] = [.existentialToGeneric, .dead, .ownedToGuaranteed, .guaranteedToOwned, .sroa]
+			target.write(kinds.filter { raw & $0.rawValue != 0 }.map { $0.description }.joined(separator: " and "))
+		}
+	}
+	
+	mutating func printLazyProtocolWitnesstableAccessor(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(0), prefix: "lazy protocol witness table accessor for type ")
+		_ = printOptional(name.children.at(1), prefix: " and conformance ")
+	}
+	
+	mutating func printLazyProtocolWitnesstableCacheVariable(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(0), prefix: "lazy protocol witness table cache variable for type ")
+		_ = printOptional(name.children.at(1), prefix: " and conformance ")
+	}
+	
+	mutating func printVTableThunk(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(1), prefix: "vtable thunk for ")
+		_ = printOptional(name.children.at(0), prefix: " dispatching to ")
+	}
+	
+	mutating func printProtocolWitness(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(1), prefix: "protocol witness for ")
+		_ = printOptional(name.children.at(0), prefix: " in conformance ")
+	}
+	
+	mutating func printPartialApplyForwarder(_ name: SwiftSymbol) {
+		target.write("partial apply\(options.contains(.shortenPartialApply) ? "" : " forwarder")")
+		if !name.children.isEmpty {
+			printChildren(name, prefix: " for ")
+		}
+	}
+	
+	mutating func printPartialApplyObjCForwarder(_ name: SwiftSymbol) {
+		target.write("partial apply\(options.contains(.shortenPartialApply) ? "" : " ObjC forwarder")")
+		if !name.children.isEmpty {
+			printChildren(name, prefix: " for ")
+		}
+	}
+	
+	mutating func printKeyPathAccessorThunkHelper(_ name: SwiftSymbol) {
+		printFirstChild(name, prefix: "key path \(name.kind == .keyPathGetterThunkHelper ? "getter" : "setter") for ", suffix: " : ")
+		for child in name.children.dropFirst() {
+			if child.kind == .isSerialized {
+				target.write(", ")
 			}
-			guard let type = name.children.first(where: { $0.kind == .type }) else { break }
-			_ = printName(type)
-			if let _ = name.children.first(where: { $0.kind == .variadicMarker }) {
-				target.write("...")
-			}
-		case .tupleElementName: target.write("\(name.text ?? ""): ")
-		case .returnType:
-			if name.children.isEmpty, let t = name.text {
-				target.write(t)
-			} else {
-				printChildren(name)
-			}
-		case .retroactiveConformance:
-			if name.children.count == 2 {
-				printChildren(name, prefix: "retroactive @ ")
-			}
-		case .weak: printFirstChild(name, prefix: "weak ")
-		case .unowned: printFirstChild(name, prefix: "unowned ")
-		case .unmanaged: printFirstChild(name, prefix: "unowned(unsafe) ")
-		case .inOut: printFirstChild(name, prefix: "inout ")
-		case .shared: printFirstChild(name, prefix: "__shared ")
-		case .owned: printFirstChild(name, prefix: "__owned ")
-		case .nonObjCAttribute: target.write("@nonobjc ")
-		case .objCAttribute: target.write("@objc ")
-		case .directMethodReferenceAttribute: target.write("super ")
-		case .dynamicAttribute: target.write("dynamic ")
-		case .vTableAttribute: target.write("override ")
-		case .functionSignatureSpecialization: printSpecializationPrefix(name, description: "function signature specialization")
-		case .genericPartialSpecialization: printSpecializationPrefix(name, description: "generic partial specialization", paramPrefix: "Signature = ")
-		case .genericPartialSpecializationNotReAbstracted: printSpecializationPrefix(name, description: "generic not re-abstracted partial specialization", paramPrefix: "Signature = ")
-		case .genericSpecialization, .genericSpecializationInResilienceDomain: printSpecializationPrefix(name, description: "generic specialization")
-		case .genericSpecializationPrespecialized: printSpecializationPrefix(name, description: "generic pre-specialization")
-		case .genericSpecializationNotReAbstracted: printSpecializationPrefix(name, description: "generic not re-abstracted specialization")
-		case .inlinedGenericFunction: printSpecializationPrefix(name, description: "inlined generic function")
-		case .isSerialized: target.write("serialized")
-		case .genericSpecializationParam:
-			printFirstChild(name)
-			_ = printOptional(name.children.at(1), prefix: " with ")
-			name.children.slice(2, name.children.endIndex).forEach {
-				target.write(" and ")
-				_ = printName($0)
-			}
-		case .functionSignatureSpecializationParam:
-			target.write("Arg[\(name.index ?? 0)] = ")
-			var idx = printFunctionSigSpecializationParam(name, index: 0)
-			while idx < name.children.count {
-				target.write(" and ")
-				idx = printFunctionSigSpecializationParam(name, index: idx)
-			}
-		case .functionSignatureSpecializationParamPayload:
-			target.write((try? parseMangledSwiftSymbol(name.text ?? "").description) ?? (name.text ?? ""))
-		case .functionSignatureSpecializationParamKind:
-			let raw = name.index ?? 0
-			if let single = FunctionSigSpecializationParamKind(rawValue: raw) {
-				target.write(single.description)
-			} else {
-				let kinds: [FunctionSigSpecializationParamKind] = [.existentialToGeneric, .dead, .ownedToGuaranteed, .guaranteedToOwned, .sroa]
-				target.write(kinds.filter { raw & $0.rawValue != 0 }.map { $0.description }.joined(separator: " and "))
-			}
-		case .specializationPassID: target.write("\(name.index ?? 0)")
-		case .builtinTypeName: target.write(name.text ?? "")
-		case .number: target.write("\(name.index ?? 0)")
-		case .infixOperator: target.write("\(name.text ?? "") infix")
-		case .prefixOperator: target.write("\(name.text ?? "") prefix")
-		case .postfixOperator: target.write("\(name.text ?? "") postfix")
-		case .lazyProtocolWitnessTableAccessor:
-			_ = printOptional(name.children.at(0), prefix: "lazy protocol witness table accessor for type ")
-			_ = printOptional(name.children.at(1), prefix: " and conformance ")
-		case .lazyProtocolWitnessTableCacheVariable:
-			_ = printOptional(name.children.at(0), prefix: "lazy protocol witness table cache variable for type ")
-			_ = printOptional(name.children.at(1), prefix: " and conformance ")
-		case .protocolWitnessTableAccessor: printFirstChild(name, prefix: "protocol witness table accessor for ")
-		case .protocolWitnessTable: printFirstChild(name, prefix: "protocol witness table for ")
-		case .protocolWitnessTablePattern: printFirstChild(name, prefix: "protocol witness table pattern for ")
-		case .genericProtocolWitnessTable: printFirstChild(name, prefix: "generic protocol witness table for ")
-		case .genericProtocolWitnessTableInstantiationFunction: printFirstChild(name, prefix: "instantiation function for generic protocol witness table for ")
-		case .resilientProtocolWitnessTable:
-			target.write("resilient protocol witness table for ")
-			printFirstChild(name)
-		case .vTableThunk:
-			_ = printOptional(name.children.at(1), prefix: "vtable thunk for ")
-			_ = printOptional(name.children.at(0), prefix: " dispatching to ")
-		case .protocolWitness:
-			_ = printOptional(name.children.at(1), prefix: "protocol witness for ")
-			_ = printOptional(name.children.at(0), prefix: " in conformance ")
-		case .partialApplyForwarder:
-			target.write("partial apply\(options.contains(.shortenPartialApply) ? "" : " forwarder")")
-			if !name.children.isEmpty {
-				printChildren(name, prefix: " for ")
-			}
-		case .partialApplyObjCForwarder:
-			target.write("partial apply\(options.contains(.shortenPartialApply) ? "" : " ObjC forwarder")")
-			if !name.children.isEmpty {
-				printChildren(name, prefix: " for ")
-			}
-		case .keyPathGetterThunkHelper, .keyPathSetterThunkHelper:
-			printFirstChild(name, prefix: "key path \(name.kind == .keyPathGetterThunkHelper ? "getter" : "setter") for ", suffix: " : ")
-			for child in name.children.dropFirst() {
-				if child.kind == .isSerialized {
-					target.write(", ")
-				}
-				_ = printName(child)
-			}
-		case .keyPathEqualsThunkHelper: fallthrough
-		case .keyPathHashThunkHelper:
-			target.write("key path index \(name.kind == .keyPathEqualsThunkHelper ? "equality" : "hash") operator for ")
-			var dropLast = false
-			if let lastChild = name.children.last, lastChild.kind == .dependentGenericSignature {
-				_ = printName(lastChild)
-				dropLast = true
-			}
-			printSequence(dropLast ? Array(name.children.dropLast()) : name.children, prefix: "(", suffix: ")", separator: ", ")
-		case .fieldOffset:
-			printFirstChild(name)
-			_ = printOptional(name.children.at(1), prefix: "field offset for ", asPrefixContext: true)
-		case .enumCase:
-			target.write("enum case for ")
-			printFirstChild(name, asPrefixContext: false)
-		case .reabstractionThunk: fallthrough
-		case .reabstractionThunkHelper:
-			if options.contains(.shortenThunk) {
-				_ = printOptional(name.children.at(name.children.count - 2), prefix: "thunk for ")
-				break
-			}
+			_ = printName(child)
+		}
+	}
+	
+	mutating func printKeyPathEqualityThunkHelper(_ name: SwiftSymbol) {
+		target.write("key path index \(name.kind == .keyPathEqualsThunkHelper ? "equality" : "hash") operator for ")
+		var dropLast = false
+		if let lastChild = name.children.last, lastChild.kind == .dependentGenericSignature {
+			_ = printName(lastChild)
+			dropLast = true
+		}
+		printSequence(dropLast ? Array(name.children.dropLast()) : name.children, prefix: "(", suffix: ")", separator: ", ")
+	}
+	
+	mutating func printFieldOffset(_ name: SwiftSymbol) {
+		printFirstChild(name)
+		_ = printOptional(name.children.at(1), prefix: "field offset for ", asPrefixContext: true)
+	}
+	
+	mutating func printReabstractionThunk(_ name: SwiftSymbol) {
+		if options.contains(.shortenThunk) {
+			_ = printOptional(name.children.at(name.children.count - 2), prefix: "thunk for ")
+		} else {
 			target.write("reabstraction thunk ")
 			target.write(name.kind == .reabstractionThunkHelper ? "helper " : "")
 			_ = printOptional(name.children.at(name.children.count - 3), suffix: " ")
 			_ = printOptional(name.children.at(name.children.count - 1), prefix: "from ")
 			_ = printOptional(name.children.at(name.children.count - 2), prefix: " to ")
-		case .mergedFunction: target.write(!options.contains(.shortenThunk) ? "merged " : "")
-		case .typeSymbolicReference: target.write("type symbolic reference \(String(format:"0x%X", name.index ?? 0))")
-		case .protocolSymbolicReference: target.write("protocol symbolic reference \(String(format:"0x%X", name.index ?? 0))")
-		case .genericTypeMetadataPattern: printFirstChild(name, prefix: "generic type metadata pattern for ")
-		case .metaclass: printFirstChild(name, prefix: "metaclass for ")
-		case .protocolConformanceDescriptor: printFirstChild(name, prefix: "protocol conformance descriptor for ")
-		case .protocolDescriptor: printFirstChild(name, prefix: "protocol descriptor for ")
-		case .protocolRequirementsBaseDescriptor: printFirstChild(name, prefix: "protocol requirements base descriptor for ")
-		case .fullTypeMetadata: printFirstChild(name, prefix: "full type metadata for ")
-		case .typeMetadata: printFirstChild(name, prefix: "type metadata for ")
-		case .typeMetadataAccessFunction: printFirstChild(name, prefix: "type metadata accessor for ")
-		case .typeMetadataInstantiationCache: printFirstChild(name, prefix: "type metadata instantiation cache for ")
-		case .typeMetadataInstantiationFunction: printFirstChild(name, prefix: "type metadata instantiation cache for ")
-		case .typeMetadataSingletonInitializationCache: printFirstChild(name, prefix: "type metadata singleton initialization cache for ")
-		case .typeMetadataCompletionFunction: printFirstChild(name, prefix: "type metadata completion function for ")
-		case .typeMetadataLazyCache: printFirstChild(name, prefix: "lazy cache variable for type metadata for ")
-		case .associatedConformanceDescriptor:
-			_ = printOptional(name.children.at(0), prefix: "associated conformance descriptor for ")
-			_ = printOptional(name.children.at(1), prefix: ".")
-			_ = printOptional(name.children.at(2), prefix: ": ")
-		case .defaultAssociatedConformanceAccessor:
-			_ = printOptional(name.children.at(0), prefix: "default associated conformance accessor for ")
-			_ = printOptional(name.children.at(1), prefix: ".")
-			_ = printOptional(name.children.at(2), prefix: ": ")
-		case .associatedTypeDescriptor: printFirstChild(name, prefix: "associated type descriptor for ")
-		case .associatedTypeMetadataAccessor:
-			_ = printOptional(name.children.at(1), prefix: "associated type metadata accessor for ")
+		}
+	}
+	
+	mutating func printAssociatedConformanceDescriptor(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(0), prefix: "associated conformance descriptor for ")
+		_ = printOptional(name.children.at(1), prefix: ".")
+		_ = printOptional(name.children.at(2), prefix: ": ")
+	}
+	
+	mutating func printDefaultAssociatedConformanceAccessor(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(0), prefix: "default associated conformance accessor for ")
+		_ = printOptional(name.children.at(1), prefix: ".")
+		_ = printOptional(name.children.at(2), prefix: ": ")
+	}
+	
+	mutating func printAssociatedTypeMetadataAccessor(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(1), prefix: "associated type metadata accessor for ")
+		_ = printOptional(name.children.at(0), prefix: " in ")
+	}
+	
+	mutating func printAssociatedTypeWitnessTableAccessor(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(1), prefix: "associated type witness table accessor for ")
+		_ = printOptional(name.children.at(2), prefix: " : ")
+		_ = printOptional(name.children.at(0), prefix: " in ")
+	}
+	
+	mutating func printValueWitness(_ name: SwiftSymbol) {
+		target.write(ValueWitnessKind(rawValue: name.index ?? 0)?.description ?? "")
+		target.write(options.contains(.shortenValueWitness) ? " for " : " value witness for ")
+		printFirstChild(name)
+	}
+	
+	mutating func printMetatype(_ name: SwiftSymbol) {
+		if name.children.count == 2 {
+			printFirstChild(name, suffix: " ")
+		}
+		guard let type = name.children.at(name.children.count == 2 ? 1 : 0)?.children.first else { return }
+		let needParens = !type.kind.isSimpleType
+		target.write(needParens ? "(" : "")
+		_ = printName(type)
+		target.write(needParens ? ")" : "")
+		target.write(type.kind.isExistentialType ? ".Protocol" : ".Type")
+	}
+	
+	mutating func printExistentialMetatype(_ name: SwiftSymbol) {
+		if name.children.count == 2 {
+			printFirstChild(name, suffix: " ")
+		}
+		_ = printOptional(name.children.at(name.children.count == 2 ? 1 : 0), suffix: ".Type")
+	}
+	
+	mutating func printAssociatedTypeRef(_ name: SwiftSymbol) {
+		printFirstChild(name)
+		target.write(".\(name.children.at(1)?.text ?? "")")
+	}
+	
+	mutating func printProtocolList(_ name: SwiftSymbol) {
+		guard let typeList = name.children.first else { return }
+		if typeList.children.isEmpty {
+			target.write("Any")
+		} else {
+			printChildren(typeList, separator: " & ")
+		}
+	}
+
+	mutating func printProtocolListWithClass(_ name: SwiftSymbol) {
+		guard name.children.count >= 2 else { return }
+		_ = printOptional(name.children.at(1), suffix: " & ")
+		if let protocolsTypeList = name.children.first?.children.first {
+			printChildren(protocolsTypeList, separator: " & ")
+		}
+	}
+
+	mutating func printProtocolListWithAnyObject(_ name: SwiftSymbol) {
+		guard let prot = name.children.first, let protocolsTypeList = prot.children.first else { return }
+		if protocolsTypeList.children.count > 0 {
+			printChildren(protocolsTypeList, suffix: " & ", separator: " & ")
+		}
+		if options.contains(.qualifyEntities) {
+			target.write("Swift.")
+		}
+		target.write("AnyObject")
+	}
+
+	mutating func printProtocolConformance(_ name: SwiftSymbol) {
+		if name.children.count == 4 {
+			_ = printOptional(name.children.at(2), prefix: "property behavior storage of ")
 			_ = printOptional(name.children.at(0), prefix: " in ")
-		case .defaultAssociatedTypeMetadataAccessor: printFirstChild(name, prefix: "default associated type metadata accessor for ")
-		case .associatedTypeWitnessTableAccessor:
-			_ = printOptional(name.children.at(1), prefix: "associated type witness table accessor for ")
-			_ = printOptional(name.children.at(2), prefix: " : ")
-			_ = printOptional(name.children.at(0), prefix: " in ")
-		case .classMetadataBaseOffset: printFirstChild(name, prefix: "class metadata base offset for ")
-		case .propertyDescriptor: printFirstChild(name, prefix: "property descriptor for ")
-		case .nominalTypeDescriptor: printFirstChild(name, prefix: "nominal type descriptor for ")
-		case .coroutineContinuationPrototype: printFirstChild(name, prefix: "coroutine continuation prototype for ")
-		case .valueWitness:
-			target.write(ValueWitnessKind(rawValue: name.index ?? 0)?.description ?? "")
-			target.write(options.contains(.shortenValueWitness) ? " for " : " value witness for ")
+			_ = printOptional(name.children.at(1), prefix: " : ")
+		} else {
 			printFirstChild(name)
-		case .valueWitnessTable:
-			printFirstChild(name, prefix: "value witness table for ")
-		case .boundGenericClass: fallthrough
-		case .boundGenericStructure: fallthrough
-		case .boundGenericEnum: fallthrough
-		case .boundGenericProtocol: fallthrough
-		case .boundGenericOtherNominalType: fallthrough
-		case .boundGenericTypeAlias: printBoundGeneric(name)
-		case .dynamicSelf: target.write("Self")
-		case .silBoxType:
-			target.write("@box ")
-			printFirstChild(name)
-		case .metatype:
-			if name.children.count == 2 {
-				printFirstChild(name, suffix: " ")
+			if options.contains(.displayProtocolConformances) {
+				_ = printOptional(name.children.at(1), prefix: " : ")
+				_ = printOptional(name.children.at(2), prefix: " in ")
 			}
-			guard let type = name.children.at(name.children.count == 2 ? 1 : 0)?.children.first else { return nil }
+		}
+	}
+	
+	mutating func printImplParameter(_ name: SwiftSymbol) {
+		if name.kind == .implErrorResult {
+			target.write("@error ")
+		}
+		printFirstChild(name)
+		target.write(" ")
+		if name.children.count == 3 {
+			_ = printOptional(name.children.at(1))
+		}
+		_ = printOptional(name.children.last)
+	}
+	
+	mutating func printDependentGenericSignature(_ name: SwiftSymbol) {
+		target.write("<")
+		var lastDepth = 0
+		for (depth, c) in name.children.enumerated() {
+			guard c.kind == .dependentGenericParamCount else { break }
+			lastDepth = depth
+			target.write(depth == 0 ? "" : "><")
+			
+			let count = name.children.at(depth)?.index ?? 0
+			for index in 0..<count {
+				target.write(index != 0 ? ", " : "")
+				if index >= 128 {
+					target.write("...")
+					break
+				}
+				target.write(archetypeName(UInt64(index), UInt64(depth)))
+			}
+		}
+		
+		if lastDepth != name.children.count - 1 {
+			if options.contains(.displayWhereClauses) {
+				printSequence(name.children.slice(lastDepth + 1, name.children.endIndex), prefix: " where ", separator: ", ")
+			}
+		}
+		target.write(">")
+	}
+	
+	mutating func printDependentGenericConformanceRequirement(_ name: SwiftSymbol) {
+		printFirstChild(name)
+		_ = printOptional(name.children.at(1), prefix: ": ")
+	}
+	
+	mutating func printDependentGenericLayoutRequirement(_ name: SwiftSymbol) {
+		guard let layout = name.children.at(1), let c = layout.text?.unicodeScalars.first else { return }
+		printFirstChild(name, suffix: ": ")
+		switch c {
+		case "U": target.write("_UnknownLayout")
+		case "R": target.write("_RefCountedObject")
+		case "N": target.write("_NativeRefCountedObject")
+		case "C": target.write("AnyObject")
+		case "D": target.write("_NativeClass")
+		case "T": target.write("_Trivial")
+		case "E", "e": target.write("_Trivial")
+		case "M", "m": target.write("_TrivialAtMost")
+		default: break
+		}
+		if name.children.count > 2 {
+			_ = printOptional(name.children.at(2), prefix: "(")
+			_ = printOptional(name.children.at(3), prefix: ", ")
+			target.write(")")
+		}
+	}
+	
+	mutating func printDependentGenericSameTypeRequirement(_ name: SwiftSymbol) {
+		printFirstChild(name)
+		_ = printOptional(name.children.at(1), prefix: " == ")
+	}
+	
+	mutating func printDependentGenericType(_ name: SwiftSymbol) {
+		guard let depType = name.children.at(1) else { return }
+		printFirstChild(name)
+		_ = printOptional(depType, prefix: depType.needSpaceBeforeType ? " " : "")
+	}
+	
+	mutating func printDependentMemberType(_ name: SwiftSymbol) {
+		printFirstChild(name)
+		target.write(".")
+		_ = printOptional(name.children.at(1))
+	}
+	
+	mutating func printDependentAssociatedTypeRef(_ name: SwiftSymbol) {
+		_ = printOptional(name.children.at(1), suffix: ".")
+		printFirstChild(name)
+	}
+	
+	mutating func printSilBoxTypeWithLayout(_ name: SwiftSymbol) {
+		guard let layout = name.children.first else { return }
+		_ = printOptional(name.children.at(1), suffix: " ")
+		_ = printName(layout)
+		if let genericArgs = name.children.at(2) {
+			printSequence(genericArgs.children, prefix: " <", suffix: ">", separator: ", ")
+		}
+	}
+	
+	mutating func printSugaredOptional(_ name: SwiftSymbol) {
+		if let type = name.children.first {
 			let needParens = !type.kind.isSimpleType
 			target.write(needParens ? "(" : "")
 			_ = printName(type)
 			target.write(needParens ? ")" : "")
-			target.write(type.kind.isExistentialType ? ".Protocol" : ".Type")
-		case .existentialMetatype:
-			if name.children.count == 2 {
-				printFirstChild(name, suffix: " ")
-			}
-			_ = printOptional(name.children.at(name.children.count == 2 ? 1 : 0), suffix: ".Type")
-		case .metatypeRepresentation: target.write(name.text ?? "")
-		case .associatedTypeRef:
-			printFirstChild(name)
-			target.write(".\(name.children.at(1)?.text ?? "")")
-		case .protocolList:
-			guard let typeList = name.children.first else { return nil }
-			if typeList.children.isEmpty {
-				target.write("Any")
-			} else {
-				printChildren(typeList, separator: " & ")
-			}
-		case .protocolListWithClass:
-			guard name.children.count >= 2 else { return nil }
-			_ = printOptional(name.children.at(1), suffix: " & ")
-			if let protocolsTypeList = name.children.first?.children.first {
-				printChildren(protocolsTypeList, separator: " & ")
-			}
-		case .protocolListWithAnyObject:
-			guard let prot = name.children.first, let protocolsTypeList = prot.children.first else { return nil }
-			if protocolsTypeList.children.count > 0 {
-				printChildren(protocolsTypeList, suffix: " & ", separator: " & ")
-			}
-			if options.contains(.qualifyEntities) {
-				target.write("Swift.")
-			}
-			target.write("AnyObject")
+			target.write("?")
+		}
+	}
+	
+	mutating func printSugaredDictionary(_ name: SwiftSymbol) {
+		target.write("[")
+		printFirstChild(name)
+		target.write(" : ")
+		_ = printOptional(name.children.at(1))
+		target.write("]")
+	}
+	
+	mutating func printOpaqueType(_ name: SwiftSymbol) {
+		printFirstChild(name)
+		target.write(".")
+		_ = printOptional(name.children.at(1))
+	}
+	
+	mutating func printImplInvocationsSubstitutions(_ name: SwiftSymbol) {
+		if let secondChild = name.children.at(0) {
+			target.write(" for <")
+			printChildren(secondChild, separator: ", ")
+			target.write(">")
+		}
+	}
+	
+	mutating func printImplPatternSubstitutions(_ name: SwiftSymbol) {
+		target.write("@substituted ")
+		printFirstChild(name)
+		if let secondChild = name.children.at(1) {
+			target.write(" for <")
+			printChildren(secondChild, separator: ", ")
+			target.write(">")
+		}
+	}
+	
+	mutating func printImplDifferentiability(_ name: SwiftSymbol) {
+		if let text = name.text, !text.isEmpty {
+			target.write("\(text) ")
+		}
+	}
+	
+	mutating func printMacroExpansionLoc(_ name: SwiftSymbol) {
+		if let module = name.children.at(0) {
+			target.write("module ")
+			_ = printName(module)
+		}
+		if let file = name.children.at(1) {
+			target.write(" file ")
+			_ = printName(file)
+		}
+		if let line = name.children.at(2) {
+			target.write(" line ")
+			_ = printName(line)
+		}
+		if let column = name.children.at(3) {
+			target.write(" column ")
+			_ = printName(column)
+		}
+	}
+	
+	mutating func printGlobalActorFunctionType(_ name: SwiftSymbol) {
+		if let firstChild = name.children.first {
+			target.write("@")
+			_ = printName(firstChild)
+			target.write(" ")
+		}
+	}
+	
+	mutating func printTypeThrowsAnnotation(_ name: SwiftSymbol) {
+		target.write(" throws(")
+		if let child = name.children.first {
+			_ = printName(child)
+		}
+		target.write(")")
+	}
+	
+	mutating func printDifferentiableFunctionType(_ name: SwiftSymbol) {
+		target.write("@differentiable")
+		switch UnicodeScalar(UInt8(name.index ?? 0)) {
+		case "f": target.write("(_forward)")
+		case "r": target.write("(reverse)")
+		case "l": target.write("(_linear)")
+		default: break
+		}
+	}
+	
+	mutating func printAsyncAwaitResumePartialFunction(_ name: SwiftSymbol) {
+		if options.contains(.showAsyncResumePartial) {
+			target.write("(")
+			_ = printName(name.children.first!)
+			target.write(")")
+			target.write(" await resume partial function for ")
+		}
+	}
+	
+	mutating func printAsyncSuspendResumePartialFunction(_ name: SwiftSymbol) {
+		if options.contains(.showAsyncResumePartial) {
+			target.write("(")
+			_ = printName(name.children.first!)
+			target.write(")")
+			target.write(" suspend resume partial function for ")
+		}
+	}
+	
+	mutating func printExtendedExistentialTypeShape(_ name: SwiftSymbol) {
+		let savedDisplayWhereClauses = options.contains(.displayWhereClauses)
+		options.insert(.displayWhereClauses)
+		var genSig: SwiftSymbol?
+		let type: SwiftSymbol
+		if name.children.count == 2 {
+			genSig = name.children[0]
+			type = name.children[1]
+		} else {
+			type = name.children[0]
+		}
+		target.write("existential shape for ")
+		if let genSig {
+			_ = printName(genSig)
+			target.write(" ")
+		}
+		target.write("any ")
+		_ = printName(type)
+		if !savedDisplayWhereClauses {
+			options.remove(.displayWhereClauses)
+		}
+	}
+	
+	mutating func printSymbolicExtendedExistentialType(_ name: SwiftSymbol) {
+		guard let shape = name.children.first else { return }
+		let isUnique = shape.kind == .uniqueExtendedExistentialTypeShapeSymbolicReference
+		target.write("symbolic existential type (\(isUnique ? "" : "non-")unique) 0x")
+		target.writeHex(shape.index ?? 0)
+		target.write(" <")
+		guard let second = name.children.at(1) else { return }
+		_ = printName(second)
+		if let third = name.children.at(2) {
+			target.write(", ")
+			_ = printName(third)
+		}
+		target.write(">")
+	}
+	
+	mutating func printTupleElement(_ name: SwiftSymbol) {
+		if let label = name.children.first(where: { $0.kind == .tupleElementName }) {
+			target.write("\(label.text ?? ""): ")
+		}
+		guard let type = name.children.first(where: { $0.kind == .type }) else { return }
+		_ = printName(type)
+		if let _ = name.children.first(where: { $0.kind == .variadicMarker }) {
+			target.write("...")
+		}
+	}
+
+	mutating func printName(_ name: SwiftSymbol, asPrefixContext: Bool = false) -> SwiftSymbol? {
+		switch name.kind {
+		case .accessibleFunctionRecord: target.write(conditional: !options.contains(.shortenThunk), "accessible function runtime record for ")
+		case .accessorAttachedMacroExpansion: return printMacro(name: name, asPrefixContext: asPrefixContext, label: "accessor")
+		case .accessorFunctionaReference: fatalError()
+		case .allocator: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .functionStyle, hasName: false, extraName: (name.children.first?.kind == .class) ? "__allocating_init" : "init")
+		case .anonymousContext: printAnonymousContext(name)
+		case .anonymousDescriptor: printFirstChild(name, prefix: "anonymous descriptor ")
+		case .anyProtocolConformanceList: fatalError()
+		case .argumentTuple: printFunctionParameters(labelList: nil, parameterType: name, showTypes: options.contains(.showFunctionArgumentTypes))
+		case .associatedConformanceDescriptor: printAssociatedConformanceDescriptor(name)
 		case .associatedType: return nil
-		case .owningAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "owningAddressor")
-		case .owningMutableAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "owningMutableAddressor")
+		case .associatedTypeDescriptor: printFirstChild(name, prefix: "associated type descriptor for ")
+		case .associatedTypeGenericParamRef: printChildren(name, prefix: "generic parameter reference for associated type ")
+		case .associatedTypeMetadataAccessor: printAssociatedTypeMetadataAccessor(name)
+		case .associatedTypeRef: printAssociatedTypeRef(name)
+		case .associatedTypeWitnessTableAccessor: printAssociatedTypeWitnessTableAccessor(name)
+		case .assocTypePath: printChildren(name, separator: ".")
+		case .asyncAnnotation: target.write(" async")
+		case .asyncAwaitResumePartialFunction: printAsyncAwaitResumePartialFunction(name)
+		case .asyncFunctionPointer: target.write("async function pointer to ")
+		case .asyncSuspendResumePartialFunction: printAsyncSuspendResumePartialFunction(name)
+		case .backDeploymentFallback: target.write(conditional: !options.contains(.shortenThunk), "back deployment fallback for ")
+		case .backDeploymentThunk: target.write(conditional: !options.contains(.shortenThunk), "back deployment thunk for ")
+		case .bodyAttachedMacroExpansion: return printMacro(name: name, asPrefixContext: asPrefixContext, label: "body")
+		case .boundGenericClass, .boundGenericStructure, .boundGenericEnum, .boundGenericProtocol, .boundGenericOtherNominalType, .boundGenericTypeAlias: printBoundGeneric(name)
+		case .builtinTypeName: target.write(name.text ?? "")
+		case .canonicalSpecializedGenericMetaclass: fatalError()
+		case .canonicalSpecializedGenericTypeMetadataAccessFunction: fatalError()
+		case .cFunctionPointer, .objCBlock, .noEscapeFunctionType, .escapingAutoClosureType, .autoClosureType, .thinFunctionType, .functionType, .escapingObjCBlock, .uncurriedFunctionType: printFunctionType(name)
+		case .clangType: target.write(name.text ?? "")
+		case .class, .structure, .enum, .protocol, .typeAlias: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: true)
+		case .classMetadataBaseOffset: printFirstChild(name, prefix: "class metadata base offset for ")
+		case .compileTimeConst: target.write("_const ")
+		case .concreteProtocolConformance: fatalError()
+		case .concurrentFunctionType: target.write("@Sendable ")
+		case .conformanceAttachedMacroExpansion: return printMacro(name: name, asPrefixContext: asPrefixContext, label: "conformance")
+		case .constructor: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .functionStyle, hasName: name.children.count > 2, extraName: "init")
+		case .coroutineContinuationPrototype: printFirstChild(name, prefix: "coroutine continuation prototype for ")
+		case .curryThunk: printFirstChild(name, prefix: "curry thunk of ")
+		case .deallocator: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: (name.children.first?.kind == .class) ? "__deallocating_deinit" : "deinit")
+		case .declContext: printFirstChild(name)
+		case .defaultArgumentInitializer: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "default argument \(name.children.at(1)?.index ?? 0)")
+		case .defaultAssociatedConformanceAccessor: printDefaultAssociatedConformanceAccessor(name)
+		case .defaultAssociatedTypeMetadataAccessor: printFirstChild(name, prefix: "default associated type metadata accessor for ")
+		case .dependentAssociatedConformance: fatalError()
+		case .dependentAssociatedTypeRef: printDependentAssociatedTypeRef(name)
+		case .dependentGenericConformanceRequirement: printDependentGenericConformanceRequirement(name)
+		case .dependentGenericLayoutRequirement: printDependentGenericLayoutRequirement(name)
+		case .dependentGenericParamCount: return nil
+		case .dependentGenericParamType: target.write(name.text ?? "")
+		case .dependentGenericSameTypeRequirement: printDependentGenericSameTypeRequirement(name)
+		case .dependentGenericType: printDependentGenericType(name)
+		case .dependentMemberType: printDependentMemberType(name)
+		case .dependentProtocolConformanceAssociated: fatalError()
+		case .dependentProtocolConformanceInherited: fatalError()
+		case .dependentProtocolConformanceRoot: fatalError()
+		case .dependentPseudogenericSignature, .dependentGenericSignature: printDependentGenericSignature(name)
+		case .destructor: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "deinit")
+		case .didSet: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "didset")
+		case .differentiableFunctionType: printDifferentiableFunctionType(name)
+		case .directMethodReferenceAttribute: target.write("super ")
+		case .directness: name.index.flatMap { Directness(rawValue: $0)?.description }.map { target.write("\($0) ") }
+		case .dispatchThunk: printFirstChild(name, prefix: "dispatch thunk of ")
+		case .distributedAccessor: target.write(conditional: !options.contains(.shortenThunk), "distributed accessor for ")
+		case .distributedThunk: target.write(conditional: !options.contains(.shortenThunk), "distributed thunk ")
+		case .dynamicallyReplaceableFunctionImpl: target.write(conditional: !options.contains(.shortenThunk), "dynamically replaceable thunk for ")
+		case .dynamicallyReplaceableFunctionKey: target.write(conditional: !options.contains(.shortenThunk), "dynamically replaceable key for ")
+		case .dynamicallyReplaceableFunctionVar: target.write(conditional: !options.contains(.shortenThunk), "dynamically replaceable variable for ")
+		case .dynamicAttribute: target.write("dynamic ")
+		case .dynamicSelf: target.write("Self")
+		case .emptyList: target.write(" empty-list ")
+		case .enumCase: printFirstChild(name, prefix: "enum case for ", asPrefixContext: false)
+		case .errorType: target.write("<ERROR TYPE>")
+		case .existentialMetatype: printExistentialMetatype(name)
+		case .explicitClosure: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: options.contains(.showFunctionArgumentTypes) ? .functionStyle : .noType, hasName: false, extraName: "closure #", extraIndex: (name.children.at(1)?.index ?? 0) + 1)
+		case .extendedExistentialTypeShape: printExtendedExistentialTypeShape(name)
+		case .extension: printExtension(name)
+		case .extensionAttachedMacroExpansion: return printMacro(name: name, asPrefixContext: asPrefixContext, label: "extension")
+		case .extensionDescriptor: printFirstChild(name, prefix: "extension descriptor ")
+		case .fieldOffset: printFieldOffset(name)
+		case .firstElementMarker: target.write(" first-element-marker ")
+		case .freestandingMacroExpansion: return printMacro(name: name, asPrefixContext: asPrefixContext, label: "freestanding")
+		case .fullTypeMetadata: printFirstChild(name, prefix: "full type metadata for ")
+		case .function, .boundGenericFunction: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .functionStyle, hasName: true)
+		case .functionSignatureSpecialization: printSpecializationPrefix(name, description: "function signature specialization")
+		case .functionSignatureSpecializationParam: printFunctionSignatureSpecializationParam(name)
+		case .functionSignatureSpecializationParamKind: printFunctionSignatureSpecializationParamKind(name)
+		case .functionSignatureSpecializationParamPayload: target.write((try? parseMangledSwiftSymbol(name.text ?? "").description) ?? (name.text ?? ""))
+		case .genericPartialSpecialization: printSpecializationPrefix(name, description: "generic partial specialization", paramPrefix: "Signature = ")
+		case .genericPartialSpecializationNotReAbstracted: printSpecializationPrefix(name, description: "generic not re-abstracted partial specialization", paramPrefix: "Signature = ")
+		case .genericProtocolWitnessTable: printFirstChild(name, prefix: "generic protocol witness table for ")
+		case .genericProtocolWitnessTableInstantiationFunction: printFirstChild(name, prefix: "instantiation function for generic protocol witness table for ")
+		case .genericSpecialization, .genericSpecializationInResilienceDomain: printSpecializationPrefix(name, description: "generic specialization")
+		case .genericSpecializationNotReAbstracted: printSpecializationPrefix(name, description: "generic not re-abstracted specialization")
+		case .genericSpecializationParam: printGenericSpecializationParam(name)
+		case .genericSpecializationPrespecialized: printSpecializationPrefix(name, description: "generic pre-specialization")
+		case .genericTypeMetadataPattern: printFirstChild(name, prefix: "generic type metadata pattern for ")
+		case .genericTypeParamDecl: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: true)
+		case .getter: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "getter")
+		case .global: printChildren(name)
+		case .globalActorFunctionType: printGlobalActorFunctionType(name)
+		case .globalGetter: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "getter")
+		case .hasSymbolQuery: target.write("#_hasSymbol query for ")
+		case .identifier: target.write(name.text ?? "")
+		case .implConvention: target.write(name.text ?? "")
+		case .implDifferentiability: printImplDifferentiability(name)
+		case .implDifferentiable: target.write("@differentiable")
+		case .implErrorResult, .implParameter, .implResult: printImplParameter(name)
+		case .implEscaping: target.write("@escaping")
+		case .implFunctionAttribute: target.write(name.text ?? "")
+		case .implFunctionType: printImplFunctionType(name)
+		case .implicitClosure: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: options.contains(.showFunctionArgumentTypes) ? .functionStyle : .noType, hasName: false, extraName: "implicit closure #", extraIndex: (name.children.at(1)?.index ?? 0) + 1)
+		case .implInvocationSubstitutions: printImplInvocationsSubstitutions(name)
+		case .implLinear: target.write("@differentiable(linear)")
+		case .implPatternSubstitutions: printImplPatternSubstitutions(name)
+		case .implYield: printChildren(name, prefix: "@yields", separator: " ")
+		case .index: target.write("\(name.index ?? 0)")
+		case .infixOperator: target.write("\(name.text ?? "") infix")
+		case .initializer: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "variable initialization expression")
+		case .inlinedGenericFunction: printSpecializationPrefix(name, description: "inlined generic function")
+		case .inOut: printFirstChild(name, prefix: "inout ")
+		case .isolated: target.write("isolated ")
+		case .isolatedAnyFunctionType: target.write("@isolated(any) ")
+		case .isolatedDeallocator: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: name.children.first?.kind == .class ? "__isolated_deallocating_deinit" : "deinit")
+		case .isSerialized: target.write("serialized")
+		case .iVarDestroyer: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "__ivar_destroyer")
+		case .iVarInitializer: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "__ivar_initializer")
+		case .keyPathEqualsThunkHelper, .keyPathHashThunkHelper: printKeyPathEqualityThunkHelper(name)
+		case .keyPathGetterThunkHelper, .keyPathSetterThunkHelper: printKeyPathAccessorThunkHelper(name)
+		case .labelList: break
+		case .lazyProtocolWitnessTableAccessor: printLazyProtocolWitnesstableAccessor(name)
+		case .lazyProtocolWitnessTableCacheVariable: printLazyProtocolWitnesstableCacheVariable(name)
+		case .localDeclName: _ = printOptional(name.children.at(1), suffix: " #\((name.children.at(0)?.index ?? 0) + 1)")
+		case .macro: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: name.children.count == 3 ? .withColon : .functionStyle, hasName: true)
+		case .macroExpansionLoc: printMacroExpansionLoc(name)
+		case .macroExpansionUniqueName: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: true, extraName: "unique name #", extraIndex: (name.children.at(2)?.index ?? 0) + 1)
+		case .materializeForSet: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "materializeForSet")
+		case .memberAttachedMacroExpansion: return printMacro(name: name, asPrefixContext: asPrefixContext, label: "member")
+		case .memberAttributeAttachedMacroExpansion: return printMacro(name: name, asPrefixContext: asPrefixContext, label: "memberAttribute")
+		case .mergedFunction: target.write(!options.contains(.shortenThunk) ? "merged " : "")
+		case .metaclass: printFirstChild(name, prefix: "metaclass for ")
+		case .metatype: printMetatype(name)
+		case .metatypeRepresentation: target.write(name.text ?? "")
+		case .methodDescriptor: printFirstChild(name, prefix: "method descriptor for ")
+		case .methodLookupFunction: printFirstChild(name, prefix: "method lookup function for ")
+		case .modifyAccessor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "modify")
+		case .module: printModule(name)
+		case .moduleDescriptor: printFirstChild(name, prefix: "module descriptor ")
 		case .nativeOwningAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "nativeOwningAddressor")
 		case .nativeOwningMutableAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "nativeOwningMutableAddressor")
 		case .nativePinningAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "nativePinningAddressor")
 		case .nativePinningMutableAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "nativePinningMutableAddressor")
-		case .unsafeAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "unsafeAddressor")
-		case .unsafeMutableAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "unsafeMutableAddressor")
-		case .globalGetter: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "getter")
-		case .getter: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "getter")
-		case .setter: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "setter")
-		case .materializeForSet: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "materializeForSet")
-		case .willSet: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "willset")
-		case .didSet: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "didset")
+		case .noDerivative: target.write("@noDerivative ")
+		case .nominalTypeDescriptor: printFirstChild(name, prefix: "nominal type descriptor for ")
+		case .nonObjCAttribute: target.write("@nonobjc ")
+		case .nonUniqueExtendedExistentialTypeShapeSymbolicReference: target.writeHex(prefix: "non-unique existential shape symbolic reference 0x", name.index ?? 0)
+		case .number: target.write("\(name.index ?? 0)")
+		case .objCAttribute: target.write("@objc ")
+		case .objectiveCProtocolSymbolicReference: target.writeHex(prefix: "objective-c protocol symbolic reference 0x", name.index ?? 0)
+		case .opaqueReturnType: target.write("some")
+		case .opaqueReturnTypeOf: printChildren(name, prefix: "<<opaque return type of ", suffix: ">>")
+		case .opaqueType: printOpaqueType(name)
+		case .opaqueTypeDescriptor: printFirstChild(name, prefix: "opaque type descriptor for ")
+		case .opaqueTypeDescriptorAccessor: printFirstChild(name, prefix: "opaque type descriptor accessor for ")
+		case .opaqueTypeDescriptorAccessorImpl: printFirstChild(name, prefix: "opaque type descriptor accessor impl for ")
+		case .opaqueTypeDescriptorAccessorKey: printFirstChild(name, prefix: "opaque type descriptor accessor key for ")
+		case .opaqueTypeDescriptorAccessorVar: printFirstChild(name, prefix: "opaque type descriptor accessor var for ")
+		case .opaqueTypeDescriptorSymbolicReference: target.writeHex(prefix: "opaque type symbolic reference 0x", name.index ?? 0)
+		case .otherNominalType: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: true)
+		case .outlinedAssignWithCopy, .outlinedAssignWithCopyNoValueWitness: printFirstChild(name, prefix: "outlined assign with copy of ")
+		case .outlinedAssignWithTake, .outlinedAssignWithTakeNoValueWitness: printFirstChild(name, prefix: "outlined assign with take of ")
+		case .outlinedBridgedMethod: target.write("outlined bridged method (\(name.text ?? "")) of ")
+		case .outlinedConsume: printFirstChild(name, prefix: "outlined consume of ")
+		case .outlinedCopy: printFirstChild(name, prefix: "outlined copy of ")
+		case .outlinedDestroy, .outlinedDestroyNoValueWitness: printFirstChild(name, prefix: "outlined destroy of ")
+		case .outlinedInitializeWithCopy, .outlinedInitializeWithCopyNoValueWitness: printFirstChild(name, prefix: "outlined init with copy of ")
+		case .outlinedInitializeWithTake: printFirstChild(name, prefix: "outlined init with take of ")
+		case .outlinedReadOnlyObject: target.write("outlined read-only object #\(name.index ?? 0) of ")
+		case .outlinedRelease: printFirstChild(name, prefix: "outlined release of ")
+		case .outlinedRetain: printFirstChild(name, prefix: "outlined retain of ")
+		case .outlinedVariable: target.write("outlined variable #\(name.index ?? 0) of ")
+		case .owned: printFirstChild(name, prefix: "__owned ")
+		case .owningAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "owningAddressor")
+		case .owningMutableAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "owningMutableAddressor")
+		case .partialApplyForwarder: printPartialApplyForwarder(name)
+		case .partialApplyObjCForwarder: printPartialApplyObjCForwarder(name)
+		case .peerAttachedMacroExpansion: return printMacro(name: name, asPrefixContext: asPrefixContext, label: "peer")
+		case .postfixOperator: target.write("\(name.text ?? "") postfix")
+		case .prefixOperator: target.write("\(name.text ?? "") prefix")
+		case .privateDeclName: printPrivateDeclName(name)
+		case .propertyDescriptor: printFirstChild(name, prefix: "property descriptor for ")
+		case .propertyWrapperBackingInitializer: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "property wrapper backing initializer")
+		case .propertyWrapperInitFromProjectedValue: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "property wrapper init from projected value")
+		case .protocolConformance: printProtocolConformance(name)
+		case .protocolConformanceDescriptor: printFirstChild(name, prefix: "protocol conformance descriptor for ")
+		case .protocolConformanceRefInOtherModule: fatalError()
+		case .protocolConformanceRefInProtocolModule: fatalError()
+		case .protocolConformanceRefInTypeModule: fatalError()
+		case .protocolDescriptor: printFirstChild(name, prefix: "protocol descriptor for ")
+		case .protocolList: printProtocolList(name)
+		case .protocolListWithAnyObject: printProtocolListWithAnyObject(name)
+		case .protocolListWithClass: printProtocolListWithClass(name)
+		case .protocolRequirementsBaseDescriptor: printFirstChild(name, prefix: "protocol requirements base descriptor for ")
+		case .protocolSymbolicReference: target.write("protocol symbolic reference \(String(format:"0x%X", name.index ?? 0))")
+		case .protocolWitness: printProtocolWitness(name)
+		case .protocolWitnessTable: printFirstChild(name, prefix: "protocol witness table for ")
+		case .protocolWitnessTableAccessor: printFirstChild(name, prefix: "protocol witness table accessor for ")
+		case .protocolWitnessTablePattern: printFirstChild(name, prefix: "protocol witness table pattern for ")
+		case .reabstractionThunk, .reabstractionThunkHelper: printReabstractionThunk(name)
 		case .readAccessor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "read")
-		case .modifyAccessor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "modify")
-		case .allocator:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .functionStyle, hasName: false, extraName: (name.children.first?.kind == .class) ? "__allocating_init" : "init")
-		case .constructor:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .functionStyle, hasName: name.children.count > 2, extraName: "init")
-		case .destructor:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "deinit")
-		case .deallocator:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: (name.children.first?.kind == .class) ? "__deallocating_deinit" : "deinit")
-		case .iVarInitializer:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "__ivar_initializer")
-		case .iVarDestroyer:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "__ivar_destroyer")
-		case .protocolConformance:
-			if name.children.count == 4 {
-				_ = printOptional(name.children.at(2), prefix: "property behavior storage of ")
-				_ = printOptional(name.children.at(0), prefix: " in ")
-				_ = printOptional(name.children.at(1), prefix: " : ")
-			} else {
-				printFirstChild(name)
-				if options.contains(.displayProtocolConformances) {
-					_ = printOptional(name.children.at(1), prefix: " : ")
-					_ = printOptional(name.children.at(2), prefix: " in ")
-				}
-			}
-		case .typeList: printChildren(name)
-		case .labelList: break
-		case .implEscaping: target.write("@escaping")
-		case .implConvention: target.write(name.text ?? "")
-		case .implFunctionAttribute: target.write(name.text ?? "")
-		case .implErrorResult:
-			target.write("@error ")
-			fallthrough
-		case .implParameter: fallthrough
-		case .implResult:
-			printFirstChild(name)
-			target.write(" ")
-			if name.children.count == 3 {
-				_ = printOptional(name.children.at(1))
-			}
-			_ = printOptional(name.children.last)
-		case .implFunctionType: printImplFunctionType(name)
-		case .errorType: target.write("<ERROR TYPE>")
-		case .dependentPseudogenericSignature: fallthrough
-		case .dependentGenericSignature:
-			target.write("<")
-			var lastDepth = 0
-			for (depth, c) in name.children.enumerated() {
-				guard c.kind == .dependentGenericParamCount else { break }
-				lastDepth = depth
-				target.write(depth == 0 ? "" : "><")
-				
-				let count = name.children.at(depth)?.index ?? 0
-				for index in 0..<count {
-					target.write(index != 0 ? ", " : "")
-					if index >= 128 {
-						target.write("...")
-						break
-					}
-					target.write(archetypeName(UInt64(index), UInt64(depth)))
-				}
-			}
-			
-			if lastDepth != name.children.count - 1 {
-				if options.contains(.displayWhereClauses) {
-					printSequence(name.children.slice(lastDepth + 1, name.children.endIndex), prefix: " where ", separator: ", ")
-				}
-			}
-			target.write(">")
-		case .dependentGenericParamCount: return nil
-		case .dependentGenericConformanceRequirement:
-			printFirstChild(name)
-			_ = printOptional(name.children.at(1), prefix: ": ")
-		case .dependentGenericLayoutRequirement:
-			guard let layout = name.children.at(1), let c = layout.text?.unicodeScalars.first else { return nil }
-			printFirstChild(name, suffix: ": ")
-			switch c {
-			case "U": target.write("_UnknownLayout")
-			case "R": target.write("_RefCountedObject")
-			case "N": target.write("_NativeRefCountedObject")
-			case "C": target.write("AnyObject")
-			case "D": target.write("_NativeClass")
-			case "T": target.write("_Trivial")
-			case "E", "e": target.write("_Trivial")
-			case "M", "m": target.write("_TrivialAtMost")
-			default: break
-			}
-			if name.children.count > 2 {
-				_ = printOptional(name.children.at(2), prefix: "(")
-				_ = printOptional(name.children.at(3), prefix: ", ")
-				target.write(")")
-			}
-		case .dependentGenericSameTypeRequirement:
-			printFirstChild(name)
-			_ = printOptional(name.children.at(1), prefix: " == ")
-		case .dependentGenericParamType: target.write(name.text ?? "")
-		case .dependentGenericType:
-			guard let depType = name.children.at(1) else { return nil }
-			printFirstChild(name)
-			_ = printOptional(depType, prefix: depType.needSpaceBeforeType ? " " : "")
-		case .dependentMemberType:
-			printFirstChild(name)
-			target.write(".")
-			_ = printOptional(name.children.at(1))
-		case .dependentAssociatedTypeRef:
-			_ = printOptional(name.children.at(1), suffix: ".")
-			printFirstChild(name)
+		case .reflectionMetadataAssocTypeDescriptor: printFirstChild(name, prefix: "reflection metadata associated type descriptor ")
 		case .reflectionMetadataBuiltinDescriptor: printFirstChild(name, prefix: "reflection metadata builtin descriptor ")
 		case .reflectionMetadataFieldDescriptor: printFirstChild(name, prefix: "reflection metadata field descriptor ")
-		case .reflectionMetadataAssocTypeDescriptor: printFirstChild(name, prefix: "reflection metadata associated type descriptor ")
 		case .reflectionMetadataSuperclassDescriptor: printFirstChild(name, prefix: "reflection metadata superclass descriptor ")
-		case .throwsAnnotation: target.write(" throws")
-		case .emptyList: target.write(" empty-list ")
-		case .firstElementMarker: target.write(" first-element-marker ")
-		case .variadicMarker: target.write(" variadic-marker ")
-		case .silBoxTypeWithLayout:
-			guard let layout = name.children.first else { return nil }
-			_ = printOptional(name.children.at(1), suffix: " ")
-			_ = printName(layout)
-			if let genericArgs = name.children.at(2) {
-				printSequence(genericArgs.children, prefix: " <", suffix: ">", separator: ", ")
-			}
+		case .relatedEntityDeclName: printFirstChild(name, prefix: "related decl '\(name.text ?? "")' for ")
+		case .resilientProtocolWitnessTable: printFirstChild(name, prefix: "resilient protocol witness table for ")
+		case .retroactiveConformance: printRetroactiveConformance(name)
+		case .returnType: printReturnType(name)
+		case .sending: target.write("sending ")
+		case .sendingResultFunctionType: target.write("sending ")
+		case .setter: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "setter")
+		case .shared: printFirstChild(name, prefix: "__shared ")
+		case .silBoxImmutableField, .silBoxMutableField: printFirstChild(name, prefix: name.kind == .silBoxImmutableField ? "let " : "var ")
 		case .silBoxLayout: printSequence(name.children, prefix: "{\(name.children.isEmpty ? "" : " ")", suffix: " }", separator: ", ")
-		case .silBoxImmutableField: fallthrough
-		case .silBoxMutableField: printFirstChild(name, prefix: name.kind == .silBoxImmutableField ? "let " : "var ")
-		case .assocTypePath: printChildren(name, separator: ".")
-		case .moduleDescriptor: printFirstChild(name, prefix: "module descriptor ")
-		case .anonymousDescriptor: printFirstChild(name, prefix: "anonymous descriptor ")
-		case .extensionDescriptor: printFirstChild(name, prefix: "extension descriptor ")
-		case .associatedTypeGenericParamRef: printChildren(name, prefix: "generic parameter reference for associated type ")
-		case .sugaredOptional:
-			if let type = name.children.first {
-				let needParens = !type.kind.isSimpleType
-				target.write(needParens ? "(" : "")
-				_ = printName(type)
-				target.write(needParens ? ")" : "")
-				target.write("?")
-			}
-		case .sugaredArray:
-			target.write("[")
-			printFirstChild(name)
-			target.write("]")
-		case .sugaredDictionary:
-			target.write("[")
-			printFirstChild(name)
-			target.write(" : ")
-			_ = printOptional(name.children.at(1))
-			target.write("]")
-		case .sugaredParen:
-			target.write("(")
-			printFirstChild(name)
-			target.write(")")
-		case .anyProtocolConformanceList:
-			fatalError()
-		case .concreteProtocolConformance:
-			fatalError()
-		case .dependentProtocolConformanceAssociated:
-			fatalError()
-		case .dependentProtocolConformanceInherited:
-			fatalError()
-		case .dependentProtocolConformanceRoot:
-			fatalError()
-		case .protocolConformanceRefInTypeModule:
-			fatalError()
-		case .protocolConformanceRefInProtocolModule:
-			fatalError()
-		case .protocolConformanceRefInOtherModule:
-			fatalError()
-		case .dependentAssociatedConformance:
-			fatalError()
-		case .unknownIndex:
-			fatalError()
-		case .accessorFunctionaReference:
-			fatalError()
-		case .canonicalSpecializedGenericMetaclass:
-			fatalError()
-		case .canonicalSpecializedGenericTypeMetadataAccessFunction:
-			fatalError()
-		case .opaqueReturnType:
-			target.write("some")
-		case .opaqueReturnTypeOf:
-			target.write("<<opaque return type of ")
-			printChildren(name)
-			target.write(">>")
-		case .opaqueType:
-			printFirstChild(name)
-			target.write(".")
-			_ = printOptional(name.children.at(1))
-		case .opaqueTypeDescriptor:
-			target.write("opaque type descriptor for ")
-			printFirstChild(name)
-		case .opaqueTypeDescriptorAccessor:
-			target.write("opaque type descriptor accessor for ")
-			printFirstChild(name)
-		case .opaqueTypeDescriptorAccessorImpl:
-			target.write("opaque type descriptor accessor impl for ")
-			printFirstChild(name)
-		case .opaqueTypeDescriptorAccessorKey:
-			target.write("opaque type descriptor accessor key for ")
-			printFirstChild(name)
-		case .opaqueTypeDescriptorAccessorVar:
-			target.write("opaque type descriptor accessor var for ")
-			printFirstChild(name)
-		case .opaqueTypeDescriptorSymbolicReference:
-			target.write("opaque type symbolic reference 0x")
-			target.writeHex(name.index ?? 0)
-		case .distributedThunk:
-			if !options.contains(.shortenThunk) {
-				target.write("distributed thunk ")
-			}
-		case .distributedAccessor:
-			if !options.contains(.shortenThunk) {
-				target.write("distributed accessor for ")
-			}
-		case .accessibleFunctionRecord:
-			if !options.contains(.shortenThunk) {
-				target.write("accessible function runtime record for ")
-			}
-		case .dynamicallyReplaceableFunctionKey:
-			if !options.contains(.shortenThunk) {
-				target.write("dynamically replaceable key for ")
-			}
-		case .dynamicallyReplaceableFunctionImpl:
-			if !options.contains(.shortenThunk) {
-				target.write("dynamically replaceable thunk for ")
-			}
-		case .dynamicallyReplaceableFunctionVar:
-			if !options.contains(.shortenThunk) {
-				target.write("dynamically replaceable variable for ")
-			}
-		case .backDeploymentThunk:
-			if !options.contains(.shortenThunk) {
-				target.write("back deployment thunk for ")
-			}
-		case .backDeploymentFallback:
-			if !options.contains(.shortenThunk) {
-				target.write("back deployment fallback for ")
-			}
-		case .implDifferentiable:
-			target.write("@differentiable")
-		case .implInvocationSubstitutions:
-			if let secondChild = name.children.at(0) {
-				target.write(" for <")
-				printChildren(secondChild, separator: ", ")
-				target.write(">")
-			}
-		case .implLinear:
-			target.write("@differentiable(linear)")
-		case .implPatternSubstitutions:
-			target.write("@substituted ")
-			printFirstChild(name)
-			if let secondChild = name.children.at(1) {
-				target.write(" for <")
-				printChildren(secondChild, separator: ", ")
-				target.write(">")
-			}
-		case .implDifferentiability:
-			if let text = name.text, !text.isEmpty {
-				target.write("\(text) ")
-			}
-		case .implYield:
-			printChildren(name, prefix: "@yields", separator: " ")
-		case .accessorAttachedMacroExpansion:
-			return printMacro(name: name, asPrefixContext: asPrefixContext, label: "accessor")
-		case .bodyAttachedMacroExpansion:
-			return printMacro(name: name, asPrefixContext: asPrefixContext, label: "body")
-		case .conformanceAttachedMacroExpansion:
-			return printMacro(name: name, asPrefixContext: asPrefixContext, label: "conformance")
-		case .extensionAttachedMacroExpansion:
-			return printMacro(name: name, asPrefixContext: asPrefixContext, label: "extension")
-		case .freestandingMacroExpansion:
-			return printMacro(name: name, asPrefixContext: asPrefixContext, label: "freestanding")
-		case .memberAttachedMacroExpansion:
-			return printMacro(name: name, asPrefixContext: asPrefixContext, label: "member")
-		case .memberAttributeAttachedMacroExpansion:
-			return printMacro(name: name, asPrefixContext: asPrefixContext, label: "memberAttribute")
-		case .peerAttachedMacroExpansion:
-			return printMacro(name: name, asPrefixContext: asPrefixContext, label: "peer")
-		case .isolatedDeallocator:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: name.children.first?.kind == .class ? "__isolated_deallocating_deinit" : "deinit")
-		case .macro:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: name.children.count == 3 ? .withColon : .functionStyle, hasName: true)
-		case .macroExpansionLoc:
-			if let module = name.children.at(0) {
-				target.write("module ")
-				_ = printName(module)
-			}
-			if let file = name.children.at(1) {
-				target.write(" file ")
-				_ = printName(file)
-			}
-			if let line = name.children.at(2) {
-				target.write(" line ")
-				_ = printName(line)
-			}
-			if let column = name.children.at(3) {
-				target.write(" column ")
-				_ = printName(column)
-			}
-		case .macroExpansionUniqueName:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: true, extraName: "unique name #", extraIndex: (name.children.at(2)?.index ?? 0) + 1)
-		case .objectiveCProtocolSymbolicReference:
-			target.write("objective-c protocol symbolic reference 0x")
-			target.writeHex(name.index ?? 0)
-		case .propertyWrapperBackingInitializer:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "property wrapper backing initializer")
-		case .propertyWrapperInitFromProjectedValue:
-			return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .noType, hasName: false, extraName: "property wrapper init from projected value")
-		case .asyncAnnotation:
-			target.write(" async")
-		case .concurrentFunctionType:
-			target.write("@Sendable ")
-		case .globalActorFunctionType:
-			if let firstChild = name.children.first {
-				target.write("@")
-				_ = printName(firstChild)
-				target.write(" ")
-			}
-		case .isolatedAnyFunctionType:
-			target.write("@isolated(any) ")
-		case .sendingResultFunctionType:
-			target.write("sending ")
-		case .typedThrowsAnnotation:
-			target.write(" throws(")
-			if let child = name.children.first {
-				_ = printName(child)
-			}
-			target.write(")")
-		case .isolated:
-			target.write("isolated ")
-		case .compileTimeConst:
-			target.write("_const ")
-		case .noDerivative:
-			target.write("@noDerivative ")
-		case .sending:
-			target.write("sending ")
-		case .differentiableFunctionType:
-			target.write("@differentiable")
-			switch UnicodeScalar(UInt8(name.index ?? 0)) {
-			case "f": target.write("(_forward)")
-			case "r": target.write("(reverse)")
-			case "l": target.write("(_linear)")
-			default: break
-			}
-		case .asyncAwaitResumePartialFunction:
-			if options.contains(.showAsyncResumePartial) {
-				target.write("(")
-				_ = printName(name.children.first!)
-				target.write(")")
-				target.write(" await resume partial function for ")
-			};
-		case .asyncFunctionPointer:
-			target.write("async function pointer to ")
-		case .asyncSuspendResumePartialFunction:
-			if options.contains(.showAsyncResumePartial) {
-				target.write("(")
-				_ = printName(name.children.first!)
-				target.write(")")
-				target.write(" suspend resume partial function for ")
-			}
-		case .clangType:
-			target.write(name.text ?? "")
-		case .extendedExistentialTypeShape:
-			let savedDisplayWhereClauses = options.contains(.displayWhereClauses)
-			options.insert(.displayWhereClauses)
-			var genSig: SwiftSymbol?
-			let type: SwiftSymbol
-			if name.children.count == 2 {
-				genSig = name.children[0]
-				type = name.children[1]
-			} else {
-				type = name.children[0]
-			}
-			target.write("existential shape for ")
-			if let genSig {
-				_ = printName(genSig)
-				target.write(" ")
-			}
-			target.write("any ")
-			_ = printName(type)
-			if !savedDisplayWhereClauses {
-				options.remove(.displayWhereClauses)
-			}
-		case .nonUniqueExtendedExistentialTypeShapeSymbolicReference:
-			target.write("non-unique existential shape symbolic reference 0x")
-			target.writeHex(name.index ?? 0)
-		case .symbolicExtendedExistentialType:
-			guard let shape = name.children.first else { return nil }
-			let isUnique = shape.kind == .uniqueExtendedExistentialTypeShapeSymbolicReference
-			target.write("symbolic existential type (\(isUnique ? "" : "non-")unique) 0x")
-			target.writeHex(shape.index ?? 0)
-			target.write(" <")
-			guard let second = name.children.at(1) else { return nil }
-			_ = printName(second)
-			if let third = name.children.at(2) {
-				target.write(", ")
-				_ = printName(third)
-			}
-			target.write(">")
-		case .uniqueExtendedExistentialTypeShapeSymbolicReference:
-			target.write("non-unique existential shape symbolic reference 0x")
-			target.writeHex(name.index ?? 0)
-		case .hasSymbolQuery:
-			target.write("#_hasSymbol query for ")
+		case .silBoxType: printFirstChild(name, prefix: "@box ")
+		case .silBoxTypeWithLayout: printSilBoxTypeWithLayout(name)
+		case .specializationPassID: target.write("\(name.index ?? 0)")
+		case .static: printFirstChild(name, prefix: "static ")
+		case .subscript: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .functionStyle, hasName: true, overwriteName: "subscript")
+		case .suffix: printSuffix(name)
+		case .sugaredArray: printFirstChild(name, prefix: "[", suffix: "]")
+		case .sugaredDictionary: printSugaredDictionary(name)
+		case .sugaredOptional: printSugaredOptional(name)
+		case .sugaredParen: printFirstChild(name, prefix: "(", suffix: ")")
+		case .symbolicExtendedExistentialType: printSymbolicExtendedExistentialType(name)
+		case .throwsAnnotation: target.write(" throws")
+		case .tuple: printChildren(name, prefix: "(", suffix: ")", separator: ", ")
+		case .tupleElement: printTupleElement(name)
+		case .tupleElementName: target.write("\(name.text ?? ""): ")
+		case .type: printFirstChild(name)
+		case .typedThrowsAnnotation: printTypeThrowsAnnotation(name)
+		case .typeList: printChildren(name)
+		case .typeMangling: printFirstChild(name)
+		case .typeMetadata: printFirstChild(name, prefix: "type metadata for ")
+		case .typeMetadataAccessFunction: printFirstChild(name, prefix: "type metadata accessor for ")
+		case .typeMetadataCompletionFunction: printFirstChild(name, prefix: "type metadata completion function for ")
+		case .typeMetadataInstantiationCache: printFirstChild(name, prefix: "type metadata instantiation cache for ")
+		case .typeMetadataInstantiationFunction: printFirstChild(name, prefix: "type metadata instantiation cache for ")
+		case .typeMetadataLazyCache: printFirstChild(name, prefix: "lazy cache variable for type metadata for ")
+		case .typeMetadataSingletonInitializationCache: printFirstChild(name, prefix: "type metadata singleton initialization cache for ")
+		case .typeSymbolicReference: target.write("type symbolic reference \(String(format:"0x%X", name.index ?? 0))")
+		case .uniqueExtendedExistentialTypeShapeSymbolicReference: target.writeHex(prefix: "non-unique existential shape symbolic reference 0x", name.index ?? 0)
+		case .unknownIndex: fatalError()
+		case .unmanaged: printFirstChild(name, prefix: "unowned(unsafe) ")
+		case .unowned: printFirstChild(name, prefix: "unowned ")
+		case .unsafeAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "unsafeAddressor")
+		case .unsafeMutableAddressor: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "unsafeMutableAddressor")
+		case .valueWitness: printValueWitness(name)
+		case .valueWitnessTable: printFirstChild(name, prefix: "value witness table for ")
+		case .variable: return printEntity(name, asPrefixContext: asPrefixContext, typePrinting: .withColon, hasName: true)
+		case .variadicMarker: target.write(" variadic-marker ")
+		case .vTableAttribute: target.write("override ")
+		case .vTableThunk: printVTableThunk(name)
+		case .weak: printFirstChild(name, prefix: "weak ")
+		case .willSet: return printAbstractStorage(name.children.first, asPrefixContext: asPrefixContext, extraName: "willset")
 		}
 		
 		return nil
@@ -5110,7 +5094,7 @@ fileprivate struct SymbolPrinter {
 		case .results: target.write(")")
 		}
 	}
-	
+
 	mutating func quotedString(_ value: String) {
 		target.write("\"")
 		for c in value.unicodeScalars {
@@ -5607,7 +5591,10 @@ fileprivate struct ScalarScanner<C: Collection> where C.Iterator.Element == Unic
 }
 
 fileprivate extension String {
-	mutating func writeHex(_ value: UInt64) {
+	mutating func writeHex(prefix: String? = nil, _ value: UInt64) {
+		if let prefix = prefix {
+			write(prefix)
+		}
 		write(String(format: "%llX", value))
 	}
 }

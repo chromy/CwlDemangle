@@ -63,9 +63,12 @@ class CwlDemangleAdditionalTests: XCTestCase {
 		}
 	}
     
-    func testIssue18() throws {
-        let symbol = try parseMangledSwiftSymbol("_$s7SwiftUI17_Rotation3DEffectV14animatableDataAA14AnimatablePairVySdAFy12CoreGraphics7CGFloatVAFyAiFyAiFyAFyA2IGAJGGGGGvpMV")
-        print(symbol.description)
+    func testIssue18() async throws {
+		 // This issue requires testing on not-the-main thread.
+		 try await Task.detached {
+			 let symbol = try parseMangledSwiftSymbol("_$s7SwiftUI17_Rotation3DEffectV14animatableDataAA14AnimatablePairVySdAFy12CoreGraphics7CGFloatVAFyAiFyAiFyAFyA2IGAJGGGGGvpMV")
+			 print(symbol.description)
+		 }.value
     }
     
     func testIssue19() throws {
