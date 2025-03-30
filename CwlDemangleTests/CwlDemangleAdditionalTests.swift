@@ -16,7 +16,7 @@ import XCTest
 class CwlDemangleAdditionalTests: XCTestCase {
 	func testUnicodeProblem() {
 		let input = "_T0s14StringProtocolP10FoundationSS5IndexVADRtzrlE10componentsSaySSGqd__11separatedBy_tsAARd__lF"
-		let output = "(extension in Foundation):Swift.StringProtocol<>.components<A where A1: Swift.StringProtocol>(separatedBy: A1) -> [Swift.String]"
+		let output = "(extension in Foundation):Swift.StringProtocol< where A.Index == Swift.String.Index>.components<A where A1: Swift.StringProtocol>(separatedBy: A1) -> [Swift.String]"
 		do {
 			let parsed = try parseMangledSwiftSymbol(input)
 			let result = parsed.print(using: SymbolPrintOptions.default.union(.synthesizeSugarOnTypes))
