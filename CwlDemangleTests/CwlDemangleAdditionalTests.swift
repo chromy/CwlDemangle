@@ -82,4 +82,16 @@ class CwlDemangleAdditionalTests: XCTestCase {
             XCTFail("Failed to demangle \(input). Got \(error)")
         }
     }
+	
+	func testIssue20() throws {
+		let input = "_$s10AppIntents13IndexedEntityPAA0aD0Tb"
+		let output = "base conformance descriptor for AppIntents.IndexedEntity: AppIntents.AppEntity"
+		do {
+			 let parsed = try parseMangledSwiftSymbol(input)
+			 let result = parsed.print(using: SymbolPrintOptions.default.union(.synthesizeSugarOnTypes))
+			 XCTAssert(result == output, "Failed to demangle \(input). Got\n\n\(result)\n, expected\n\n\(output)")
+		} catch {
+			 XCTFail("Failed to demangle \(input). Got \(error)")
+		}
+	}
 }
