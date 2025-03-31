@@ -16,7 +16,7 @@ import XCTest
 class CwlDemangleAdditionalTests: XCTestCase {
 	func testUnicodeProblem() {
 		let input = "_T0s14StringProtocolP10FoundationSS5IndexVADRtzrlE10componentsSaySSGqd__11separatedBy_tsAARd__lF"
-		let output = "(extension in Foundation):Swift.StringProtocol<>.components<A where A1: Swift.StringProtocol>(separatedBy: A1) -> [Swift.String]"
+		let output = "(extension in Foundation):Swift.StringProtocol< where A.Index == Swift.String.Index>.components<A where A1: Swift.StringProtocol>(separatedBy: A1) -> [Swift.String]"
 		do {
 			let parsed = try parseMangledSwiftSymbol(input)
 			let result = parsed.print(using: SymbolPrintOptions.default.union(.synthesizeSugarOnTypes))
@@ -63,9 +63,12 @@ class CwlDemangleAdditionalTests: XCTestCase {
 		}
 	}
     
-    func testIssue18() throws {
-        let symbol = try parseMangledSwiftSymbol("_$s7SwiftUI17_Rotation3DEffectV14animatableDataAA14AnimatablePairVySdAFy12CoreGraphics7CGFloatVAFyAiFyAiFyAFyA2IGAJGGGGGvpMV")
-        print(symbol.description)
+    func testIssue18() async throws {
+		 // This issue requires testing on not-the-main thread.
+		 try await Task.detached {
+			 let symbol = try parseMangledSwiftSymbol("_$s7SwiftUI17_Rotation3DEffectV14animatableDataAA14AnimatablePairVySdAFy12CoreGraphics7CGFloatVAFyAiFyAiFyAFyA2IGAJGGGGGvpMV")
+			 print(symbol.description)
+		 }.value
     }
     
     func testIssue19() throws {
@@ -79,4 +82,16 @@ class CwlDemangleAdditionalTests: XCTestCase {
             XCTFail("Failed to demangle \(input). Got \(error)")
         }
     }
+	
+	func testIssue20() throws {
+		let input = "_$s10AppIntents13IndexedEntityPAA0aD0Tb"
+		let output = "base conformance descriptor for AppIntents.IndexedEntity: AppIntents.AppEntity"
+		do {
+			 let parsed = try parseMangledSwiftSymbol(input)
+			 let result = parsed.print(using: SymbolPrintOptions.default.union(.synthesizeSugarOnTypes))
+			 XCTAssert(result == output, "Failed to demangle \(input). Got\n\n\(result)\n, expected\n\n\(output)")
+		} catch {
+			 XCTFail("Failed to demangle \(input). Got \(error)")
+		}
+	}
 }
