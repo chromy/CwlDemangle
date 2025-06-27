@@ -16,7 +16,7 @@ let package = Package(
             name: "CwlDemangle",
             path: "CwlDemangle",
             exclude: ["main.swift"],
-            sources: ["CwlDemangle.swift"]
+            sources: ["CwlDemangle.swift", "CwlDemangle+JSON.swift"]
         ),
         .target(
             name: "CwlDemangleTool",
