@@ -1,6 +1,6 @@
 import Foundation
 
-extension SwiftSymbol: Encodable {
+public struct SwiftSymbolResult: Encodable {
   enum CodingKeys: String, CodingKey {
     case name
     case type
@@ -9,17 +9,27 @@ extension SwiftSymbol: Encodable {
     case testName
     case typeName
     case description
+    case mangled
+  }
+
+  let symbol: SwiftSymbol
+  let mangled: String
+
+  public init(symbol: SwiftSymbol, mangled: String) {
+    self.symbol = symbol
+    self.mangled = mangled
   }
 
   public func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
-    try container.encode(identifier, forKey: .name)
-    try container.encode(typeName, forKey: .type)
-    try container.encode(identifier, forKey: .identifier)
-    try container.encode(module, forKey: .module)
-    try container.encode(testName, forKey: .testName)
-    try container.encode(typeName, forKey: .typeName)
-    try container.encode(description, forKey: .description)
+    try container.encode(symbol.identifier, forKey: .name)
+    try container.encode(symbol.typeName, forKey: .type)
+    try container.encode(symbol.identifier, forKey: .identifier)
+    try container.encode(symbol.module, forKey: .module)
+    try container.encode(symbol.testName, forKey: .testName)
+    try container.encode(symbol.typeName, forKey: .typeName)
+    try container.encode(symbol.description, forKey: .description)
+    try container.encode(mangled, forKey: .mangled)
   }
 }
 
