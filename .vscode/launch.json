@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:CwlDemangle}",
+      "name": "Debug demangle",
+      "program": "${workspaceFolder:CwlDemangle}/.build/debug/demangle",
+      "preLaunchTask": "swift: Build Debug demangle"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:CwlDemangle}",
+      "name": "Release demangle",
+      "program": "${workspaceFolder:CwlDemangle}/.build/release/demangle",
+      "preLaunchTask": "swift: Build Release demangle"
+    }
+  ]
+}

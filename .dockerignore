@@ -1,0 +1,10 @@
+.git
+.gitignore
+.build
+.swiftpm
+*.xcodeproj
+*.xcworkspace
+.DS_Store
+*.md
+.github
+.vscode
