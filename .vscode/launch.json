@@ -5,18 +5,18 @@
       "request": "launch",
       "args": [],
       "cwd": "${workspaceFolder:CwlDemangle}",
-      "name": "Debug demangle",
-      "program": "${workspaceFolder:CwlDemangle}/.build/debug/demangle",
-      "preLaunchTask": "swift: Build Debug demangle"
+      "name": "Debug cwl-demangle",
+      "program": "${workspaceFolder:CwlDemangle}/.build/debug/cwl-demangle",
+      "preLaunchTask": "swift: Build Debug cwl-demangle"
     },
     {
       "type": "swift",
       "request": "launch",
       "args": [],
       "cwd": "${workspaceFolder:CwlDemangle}",
-      "name": "Release demangle",
-      "program": "${workspaceFolder:CwlDemangle}/.build/release/demangle",
-      "preLaunchTask": "swift: Build Release demangle"
+      "name": "Release cwl-demangle",
+      "program": "${workspaceFolder:CwlDemangle}/.build/release/cwl-demangle",
+      "preLaunchTask": "swift: Build Release cwl-demangle"
     }
   ]
 }

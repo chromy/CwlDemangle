@@ -54,13 +54,7 @@ struct SingleCommand: ParsableCommand {
             let result = swiftSymbol.print(using: printOptions)
 
             if json {
-                let jsonResult: [String: Any] = [
-                    "input": symbol,
-                    "output": result,
-                    "success": true,
-                    "isType": isType
-                ]
-                let jsonData = try JSONSerialization.data(withJSONObject: jsonResult, options: .prettyPrinted)
+                let jsonData = try JSONEncoder().encode(SwiftSymbolResult(symbol: swiftSymbol, mangled: symbol))
                 if let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
                 }
@@ -69,13 +63,12 @@ struct SingleCommand: ParsableCommand {
             }
         } catch {
             if json {
-                let jsonResult: [String: Any] = [
-                    "input": symbol,
+                let errorResult: [String: Any] = [
                     "error": error.localizedDescription,
-                    "success": false,
+                    "input": symbol,
                     "isType": isType
                 ]
-                let jsonData = try JSONSerialization.data(withJSONObject: jsonResult, options: .prettyPrinted)
+                let jsonData = try JSONSerialization.data(withJSONObject: errorResult, options: .prettyPrinted)
                 if let jsonString = String(data: jsonData, encoding: .utf8) {
                     print(jsonString)
                 }
@@ -88,6 +81,16 @@ struct SingleCommand: ParsableCommand {
 }
 
 // MARK: - Batch Processing
+
+struct BatchResult: Encodable {
+    struct Error: Encodable {
+        let input: String
+        let error: String
+    }
+
+    let results: [SwiftSymbolResult]
+    let errors: [Error]
+}
 
 struct BatchCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -115,9 +118,11 @@ struct BatchCommand: ParsableCommand {
 
     func run() throws {
         let printOptions = parsePrintOptions(options)
-        var results: [[String: Any]] = []
+        var results: [SwiftSymbolResult] = []
+        var errors: [BatchResult.Error] = []
         var errorCount = 0
         var successCount = 0
+				let jsonEncoder = JSONEncoder()
 
         // Read input
         let inputContent: String
@@ -134,31 +139,19 @@ struct BatchCommand: ParsableCommand {
 
             do {
                 let swiftSymbol = try parseMangledSwiftSymbol(trimmedLine, isType: isType)
-                let result = swiftSymbol.print(using: printOptions)
                 successCount += 1
 
                 if json {
-                    results.append([
-                        "line": index + 1,
-                        "input": trimmedLine,
-                        "output": result,
-                        "success": true,
-                        "isType": isType
-                    ])
+                    results.append(SwiftSymbolResult(symbol: swiftSymbol, mangled: trimmedLine))
                 } else {
+                    let result = swiftSymbol.print(using: printOptions)
                     print("\(trimmedLine) -> \(result)")
                 }
             } catch {
                 errorCount += 1
 
                 if json {
-                    results.append([
-                        "line": index + 1,
-                        "input": trimmedLine,
-                        "error": error.localizedDescription,
-                        "success": false,
-                        "isType": isType
-                    ])
+                    errors.append(BatchResult.Error(input: trimmedLine, error: error.localizedDescription))
                 } else {
                     print("Error on line \(index + 1): \(error.localizedDescription)")
                     if !continueOnError {
@@ -170,16 +163,8 @@ struct BatchCommand: ParsableCommand {
 
         // Output results
         if json {
-            let jsonResult: [String: Any] = [
-                "summary": [
-                    "total": lines.count,
-                    "successful": successCount,
-                    "errors": errorCount
-                ],
-                "results": results
-            ]
-
-            let jsonData = try JSONSerialization.data(withJSONObject: jsonResult, options: .prettyPrinted)
+						let batchResult = BatchResult(results: results, errors: errors)
+            let jsonData = try jsonEncoder.encode(batchResult)
             let jsonString = String(data: jsonData, encoding: .utf8) ?? ""
 
             if let outputFile = output {
@@ -216,7 +201,8 @@ struct TestCommand: ParsableCommand {
 
     func run() throws {
         let manglings = readManglings()
-        var results: [[String: Any]] = []
+        var results: [SwiftSymbol] = []
+        var errors: [[String: Any]] = []
         var errorCount = 0
         var successCount = 0
 
@@ -243,12 +229,7 @@ struct TestCommand: ParsableCommand {
                 }
 
                 if json {
-                    results.append([
-                        "input": mangling.input,
-                        "expected": mangling.output,
-                        "actual": result,
-                        "success": success
-                    ])
+                    results.append(swiftSymbol)
                 } else {
                     if success {
                         print("✓ \(mangling.input) -> \(result)")
@@ -261,11 +242,10 @@ struct TestCommand: ParsableCommand {
             } catch {
                 errorCount += 1
                 if json {
-                    results.append([
+                    errors.append([
                         "input": mangling.input,
                         "expected": mangling.output,
-                        "error": error.localizedDescription,
-                        "success": false
+                        "error": error.localizedDescription
                     ])
                 } else {
                     print("✗ \(mangling.input) - Error: \(error.localizedDescription)")
@@ -280,7 +260,8 @@ struct TestCommand: ParsableCommand {
                     "successful": successCount,
                     "errors": errorCount
                 ],
-                "results": results
+                "results": results,
+                "errors": errors
             ]
 
             let jsonData = try JSONSerialization.data(withJSONObject: jsonResult, options: .prettyPrinted)

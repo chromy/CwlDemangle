@@ -39,7 +39,7 @@ docker-test: docker-build
 # Run the executable locally
 run:
 	@echo "🚀 Running CwlDemangle..."
-	swift run demangle
+	swift run cwl-demangle
 
 # Show help
 help:

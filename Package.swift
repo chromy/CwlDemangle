@@ -6,7 +6,7 @@ let package = Package(
     name: "CwlDemangle",
     products: [
         .library(name: "CwlDemangle", targets: ["CwlDemangle"]),
-        .executable(name: "demangle", targets: ["CwlDemangleTool"]),
+        .executable(name: "cwl-demangle", targets: ["CwlDemangleTool"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
@@ -16,7 +16,7 @@ let package = Package(
             name: "CwlDemangle",
             path: "CwlDemangle",
             exclude: ["main.swift"],
-            sources: ["CwlDemangle.swift"]
+            sources: ["CwlDemangle.swift", "CwlDemangle+JSON.swift"]
         ),
         .target(
             name: "CwlDemangleTool",
