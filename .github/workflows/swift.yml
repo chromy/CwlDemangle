@@ -7,7 +7,11 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            artifact-name: cwl-demangle-linux-x86_64
+          - os: macos-latest
+            artifact-name: cwl-demangle-macos-arm64
       fail-fast: false
 
     name: Build and test package
@@ -23,3 +27,12 @@ jobs:
       run: swift build -v
     - name: Run tests
       run: swift test -v
+    - name: Prepare binary for upload
+      run: cp .build/release/cwl-demangle ${{ matrix.artifact-name }}
+      if: github.ref_type == 'tag'
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      if: github.ref_type == 'tag'
+      with:
+        files: |
+          ${{ matrix.artifact-name }}
