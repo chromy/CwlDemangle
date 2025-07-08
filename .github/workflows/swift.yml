@@ -1,14 +1,24 @@
 name: Swift Package
 
-on: [push]
+on: [push, pull_request]
 
 jobs:
   build:
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+      fail-fast: false
+
     name: Build and test package
-    runs-on: macOS-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
+    - name: Setup Swift
+      uses: swift-actions/setup-swift@v2
+      with:
+        swift-version: "6.0.3"
     - name: Build
       run: swift build -v
     - name: Run tests
