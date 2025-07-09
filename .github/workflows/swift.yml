@@ -29,6 +29,14 @@ jobs:
       run: swift build -v
     - name: Run tests
       run: swift test -v
+    - name: Test command line tool
+      run: |
+        actual=$(.build/debug/cwl-demangle single "_TFC3foo3bar3bazfT_S0_")
+        expected="foo.bar.baz() -> foo.bar"
+        if [[ "$actual" != *$expected* ]]; then
+          echo "Demangle _TFC3foo3bar3bazfT_S0_ expected $expected was $actual"
+          exit 1
+        fi
     - name: Build release
       run: make build
       if: github.ref_type == 'tag'
